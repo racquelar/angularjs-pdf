@@ -3,6 +3,8 @@
  * @version 2.0.0
  * @link https://github.com/sayanee/angular-pdf#readme
  * @license MIT License, http://www.opensource.org/licenses/MIT
+ * 
+ * @comments:  rgault 11/18/2019: Custom code added to support form fields  
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -139,10 +141,10 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
       initCanvas(element, canvas);
       var creds = attrs.usecredentials;
       debug = attrs.hasOwnProperty('debug') ? attrs.debug : false;
-
+           
       var ctx = canvas.getContext('2d');
       var windowEl = angular.element($window);
-
+     
       element.css('display', 'block');
 
       windowEl.on('scroll', function () {
@@ -151,7 +153,9 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
         });
       });
 
-      PDFJS.disableWorker = true;
+      //PDFJS.disableWorker = true;
+      // changed by rgault 11/18/2019 : pdfjs >= Version 2.0 requires pdfJS worker
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '/js/lib/pdf.worker.js'; 
       scope.pageNum = pageToDisplay;
 
       scope.renderPage = function (num) {
@@ -163,7 +167,7 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
           var viewport = void 0;
           var pageWidthScale = void 0;
           var renderContext = void 0;
-
+          
           if (pageFit) {
             viewport = page.getViewport(1);
             var clientRect = element[0].getBoundingClientRect();
@@ -174,6 +178,20 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
             scale = pageWidthScale;
           }
           viewport = page.getViewport(scale);
+          
+          // added by rgault 11/18/2019 : custom code to loop over form fields
+          page.getAnnotations().then(function(field){
+            
+            field.forEach(function(element){ 
+              if(element.subtype == 'Widget'){
+                if(element.rect){
+                  var fieldRect = viewport.convertToViewportRectangle(element.rect);
+                  element.rect = fieldRect;
+                }
+              }
+            });
+            
+          });
 
           setCanvasDimensions(canvas, viewport.width, viewport.height);
 
@@ -263,16 +281,16 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
         }
 
         if (url && url.length) {
-          pdfLoaderTask = PDFJS.getDocument(params);
+          pdfLoaderTask = pdfjsLib.getDocument(params);
           pdfLoaderTask.onProgress = scope.onProgress;
           pdfLoaderTask.onPassword = scope.onPassword;
           pdfLoaderTask.then(function (_pdfDoc) {
             if (angular.isFunction(scope.onLoad)) {
-              scope.onLoad();
+              scope.onLoad(_pdfDoc); // added by rgault 11/18/2019 : custom code to pass back the pdfdoc
             }
 
             pdfDoc = _pdfDoc;
-            scope.renderPage(scope.pageToDisplay);
+            scope.renderPage(scope.pageToDisplay); // added by rgault 11/18/2019 : custom code to reload form fields on page
 
             scope.$apply(function () {
               scope.pageCount = _pdfDoc.numPages;
@@ -290,7 +308,9 @@ var NgPdf = exports.NgPdf = ["$window", "$document", "$log", function NgPdf($win
       scope.$watch('pageNum', function (newVal) {
         scope.pageToDisplay = parseInt(newVal);
         if (pdfDoc !== null) {
-          scope.renderPage(scope.pageToDisplay);
+          //scope.renderPage(scope.pageToDisplay);
+          scope.pageFormFields = []; // added by rgault 11/18/2019 : clear out form fields before going to new page
+          renderPDF();
         }
       });
 
